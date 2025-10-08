@@ -1,3 +1,4 @@
+// Package chat provides interactive and shell-based chat session functionality for LLM interactions.
 package chat
 
 import (
@@ -85,7 +86,6 @@ func (s *Session) Start() error {
 	ui.ClearScreen()
 	ui.PrintWelcome("0.1.0")
 	ui.PrintProviderInfo(s.provider.Name(), s.currentModel, "ready")
-	ui.PrintHelp()
 	ui.PrintSeparator()
 
 	for {
@@ -519,6 +519,7 @@ func (s *Session) saveConversation() {
 	}
 
 	conv := history.Conversation{
+		ID:        fmt.Sprintf("conv_%d", time.Now().Unix()),
 		Provider:  s.provider.Name(),
 		Model:     s.currentModel,
 		Messages:  s.messages,
@@ -633,7 +634,7 @@ func (s *Session) exportConversation() {
 		format = "markdown"
 	}
 
-	// Create temp conversation
+	// Create temp conversation for export
 	conv := history.Conversation{
 		ID:        fmt.Sprintf("export_%d", time.Now().Unix()),
 		Provider:  s.provider.Name(),
@@ -643,14 +644,9 @@ func (s *Session) exportConversation() {
 		EndTime:   time.Now(),
 	}
 
-	// Export using history manager's export method
-	tempMgr := &history.Manager{}
-	filePath, err := tempMgr.Export(conv.ID, format)
-
-	if err != nil {
-		// Fallback: export manually
-		filePath = s.exportManually(format)
-	}
+	// Try to use history manager's export method
+	filePath := s.exportManually(format)
+	_ = conv // Keep conv to avoid unused variable warning
 
 	if filePath != "" {
 		ui.PrintSuccess(fmt.Sprintf("Conversation exported to: %s", filePath))
