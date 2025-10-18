@@ -86,27 +86,70 @@ func (s *Session) Start() error {
 	ui.ClearScreen()
 	ui.PrintWelcome("0.1.0")
 	ui.PrintProviderInfo(s.provider.Name(), s.currentModel, "ready")
+	/* ui.PrintHelp() */
 	ui.PrintSeparator()
 
 	for {
 		ui.PrintUserPrompt()
 
+		// Read first line
 		if !s.scanner.Scan() {
 			break
 		}
 
-		input := strings.TrimSpace(s.scanner.Text())
+		firstLine := s.scanner.Text()
+		trimmedFirst := strings.TrimSpace(firstLine)
 
-		// Handle empty input
-		if input == "" {
+		// If it's a command, execute immediately (single Enter)
+		if strings.HasPrefix(trimmedFirst, "/") {
+			if trimmedFirst == "" {
+				continue
+			}
+			if shouldExit := s.handleCommand(trimmedFirst); shouldExit {
+				break
+			}
 			continue
 		}
 
-		// Handle commands
-		if strings.HasPrefix(input, "/") {
-			if shouldExit := s.handleCommand(input); shouldExit {
+		// For regular prompts, enable multi-line input (double Enter)
+		inputLines := []string{firstLine}
+		emptyLineCount := 0
+
+		// If first line is empty, skip multi-line collection
+		if trimmedFirst == "" {
+			continue
+		}
+
+		for {
+			if !s.scanner.Scan() {
+				// EOF - process what we have
 				break
 			}
+
+			line := s.scanner.Text()
+
+			// Check if line is empty
+			if strings.TrimSpace(line) == "" {
+				emptyLineCount++
+				// If two consecutive empty lines, we're done with input
+				if emptyLineCount >= 2 {
+					break
+				}
+				// Add the empty line to preserve formatting
+				inputLines = append(inputLines, "")
+				continue
+			}
+
+			// Reset empty line counter and add the line
+			emptyLineCount = 0
+			inputLines = append(inputLines, line)
+		}
+
+		// Join all lines into final input
+		input := strings.TrimSpace(strings.Join(inputLines, "\n"))
+
+		// Handle empty input
+		if input == "" {
 			continue
 		}
 

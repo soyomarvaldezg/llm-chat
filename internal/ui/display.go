@@ -113,7 +113,7 @@ Available Commands:
   /exit, /quit  - Exit the chat
 
 Tips:
-  • Press Enter twice for multi-line input
+  • Press Enter twice (on empty lines) to submit multi-line input
   • Use Ctrl+C to interrupt generation
   • Type naturally - the AI understands context
   • Use /assess to get feedback on your prompts
