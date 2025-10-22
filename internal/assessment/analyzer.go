@@ -1,3 +1,5 @@
+// Package assessment provides prompt quality analysis and improvement capabilities.
+// It evaluates prompts across multiple criteria and generates actionable feedback.
 package assessment
 
 import (
@@ -40,6 +42,7 @@ func (a *Analyzer) Analyze(prompt string) *Assessment {
 
 	// Run all criterion checks
 	assessment.Criteria = append(assessment.Criteria, a.checkClarity(prompt))
+	assessment.Criteria = append(assessment.Criteria, a.checkRelevance(prompt))
 	assessment.Criteria = append(assessment.Criteria, a.checkSpecificity(prompt))
 	assessment.Criteria = append(assessment.Criteria, a.checkContext(prompt))
 	assessment.Criteria = append(assessment.Criteria, a.checkStructure(prompt))
@@ -75,12 +78,16 @@ func (a *Analyzer) Analyze(prompt string) *Assessment {
 func (a *Analyzer) checkClarity(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Clarity",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	length := len(prompt)
 	wordCount := len(strings.Fields(prompt))
+	hasPunctuation := strings.ContainsAny(prompt, ".?!")
+
+	// Check for undefined terms in quotes
+	hasUndefinedQuotes := strings.Count(prompt, `"`) >= 2 || strings.Count(prompt, "'") >= 2
 
 	if length < 10 {
 		criterion.Score = 1
@@ -88,23 +95,117 @@ func (a *Analyzer) checkClarity(prompt string) Criterion {
 		criterion.Description = "Prompt is too short to be clear"
 		criterion.Suggestions = append(criterion.Suggestions, "Expand your prompt with more details")
 	} else if length < 30 || wordCount < 5 {
-		criterion.Score = 2
-		criterion.Status = "Fair"
+		criterion.Score = 3
+		criterion.Status = "Poor"
 		criterion.Description = "Prompt is vague and needs more detail"
 		criterion.Suggestions = append(criterion.Suggestions, "Add specific details about what you want")
-	} else if !strings.ContainsAny(prompt, ".?!") && wordCount < 15 {
-		criterion.Score = 3
-		criterion.Status = "Good"
+	} else if !hasPunctuation && wordCount < 15 {
+		criterion.Score = 5
+		criterion.Status = "Fair"
 		criterion.Description = "Prompt could be clearer with better structure"
 		criterion.Suggestions = append(criterion.Suggestions, "Use proper punctuation and complete sentences")
+	} else if hasUndefinedQuotes {
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "Clear but has undefined terms in quotes"
+		criterion.Suggestions = append(criterion.Suggestions, "Define terms in quotes or remove ambiguous references")
 	} else if wordCount < 20 {
-		criterion.Score = 4
-		criterion.Status = "Very Good"
+		criterion.Score = 7
+		criterion.Status = "Good"
 		criterion.Description = "Prompt is clear but could be more detailed"
+	} else if wordCount < 40 {
+		criterion.Score = 8
+		criterion.Status = "Very Good"
+		criterion.Description = "Clear and well-articulated prompt"
 	} else {
-		criterion.Score = 5
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Prompt is clear and well-articulated"
+		criterion.Description = "Exceptionally clear with unambiguous intent"
+	}
+
+	return criterion
+}
+
+// checkRelevance assesses if the prompt aligns with a practical goal or outcome
+func (a *Analyzer) checkRelevance(prompt string) Criterion {
+	criterion := Criterion{
+		Name:        "Relevance",
+		MaxScore:    10,
+		Suggestions: make([]string, 0),
+	}
+
+	lowerPrompt := strings.ToLower(prompt)
+
+	// Look for goal/purpose indicators
+	purposeMarkers := []string{
+		"so that", "in order to", "because", "to help", "my goal",
+		"i need", "i want to", "the purpose", "this will", "for my",
+		"i'm trying to", "i'm working on", "for the purpose of",
+	}
+
+	// Look for outcome/deliverable indicators
+	outcomeMarkers := []string{
+		"deliverable", "output", "result", "decision", "action", "plan",
+		"strategy", "solution", "answer to", "help me decide", "determine",
+	}
+
+	// Look for practical application
+	applicationMarkers := []string{
+		"project", "task", "work", "assignment", "problem", "use case",
+		"scenario", "situation", "implement", "apply", "build",
+	}
+
+	purposeCount := 0
+	for _, marker := range purposeMarkers {
+		if strings.Contains(lowerPrompt, marker) {
+			purposeCount++
+		}
+	}
+
+	outcomeCount := 0
+	for _, marker := range outcomeMarkers {
+		if strings.Contains(lowerPrompt, marker) {
+			outcomeCount++
+		}
+	}
+
+	applicationCount := 0
+	for _, marker := range applicationMarkers {
+		if strings.Contains(lowerPrompt, marker) {
+			applicationCount++
+		}
+	}
+
+	totalRelevance := purposeCount + outcomeCount + applicationCount
+
+	switch {
+	case totalRelevance == 0:
+		criterion.Score = 3
+		criterion.Status = "Poor"
+		criterion.Description = "No clear goal or practical outcome specified"
+		criterion.Suggestions = append(criterion.Suggestions, "Add 'so that...' or explain why you need this information")
+	case purposeCount > 0 && totalRelevance == 1:
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "Purpose mentioned but outcome unclear"
+		criterion.Suggestions = append(criterion.Suggestions, "Link to a specific decision or deliverable")
+	case outcomeCount > 0 && totalRelevance <= 2:
+		criterion.Score = 7
+		criterion.Status = "Good"
+		criterion.Description = "Practical outcome identified"
+	case totalRelevance == 3:
+		criterion.Score = 8
+		criterion.Status = "Very Good"
+		criterion.Description = "Clear goal with practical application"
+	case totalRelevance >= 4:
+		criterion.Score = 10
+		criterion.Status = "Excellent"
+		criterion.Description = "Explicitly linked to decision, deliverable, or actionable outcome"
+	default:
+		criterion.Score = 5
+		criterion.Status = "Fair"
+		criterion.Description = "Some relevance but goal not explicit"
+		criterion.Suggestions = append(criterion.Suggestions, "Clarify the practical goal or outcome you're seeking")
 	}
 
 	return criterion
@@ -114,14 +215,14 @@ func (a *Analyzer) checkClarity(prompt string) Criterion {
 func (a *Analyzer) checkSpecificity(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Specificity",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
 
 	// Look for action verbs
-	actionVerbs := []string{"explain", "write", "create", "analyze", "describe", "compare", "list", "summarize", "generate", "translate"}
+	actionVerbs := []string{"explain", "write", "create", "analyze", "describe", "compare", "list", "summarize", "generate", "translate", "build", "design", "implement"}
 	hasActionVerb := false
 	for _, verb := range actionVerbs {
 		if strings.Contains(lowerPrompt, verb) {
@@ -131,7 +232,7 @@ func (a *Analyzer) checkSpecificity(prompt string) Criterion {
 	}
 
 	// Look for specificity indicators
-	specificityMarkers := []string{"specific", "detailed", "particular", "exactly", "precisely"}
+	specificityMarkers := []string{"specific", "detailed", "particular", "exactly", "precisely", "how many", "which", "what type"}
 	hasSpecificityMarker := false
 	for _, marker := range specificityMarkers {
 		if strings.Contains(lowerPrompt, marker) {
@@ -142,29 +243,35 @@ func (a *Analyzer) checkSpecificity(prompt string) Criterion {
 
 	wordCount := len(strings.Fields(prompt))
 
-	if !hasActionVerb && wordCount < 10 {
+	switch {
+	case !hasActionVerb && wordCount < 10:
 		criterion.Score = 1
 		criterion.Status = "Poor"
 		criterion.Description = "Prompt lacks clear direction or specific task"
 		criterion.Suggestions = append(criterion.Suggestions, "Start with an action verb (e.g., 'explain', 'create', 'analyze')")
-	} else if !hasActionVerb {
-		criterion.Score = 2
-		criterion.Status = "Fair"
+	case !hasActionVerb:
+		criterion.Score = 3
+		criterion.Status = "Poor"
 		criterion.Description = "Prompt needs a clearer task or objective"
 		criterion.Suggestions = append(criterion.Suggestions, "Specify exactly what you want (e.g., 'explain how X works')")
-	} else if !hasSpecificityMarker && wordCount < 20 {
-		criterion.Score = 3
-		criterion.Status = "Good"
+	case !hasSpecificityMarker && wordCount < 20:
+		criterion.Score = 5
+		criterion.Status = "Fair"
 		criterion.Description = "Prompt has a task but could be more specific"
 		criterion.Suggestions = append(criterion.Suggestions, "Add details about scope, depth, or focus")
-	} else if wordCount < 30 {
-		criterion.Score = 4
+	case !hasSpecificityMarker && wordCount < 40:
+		criterion.Score = 7
+		criterion.Status = "Good"
+		criterion.Description = "Clear task but lacks precise details"
+		criterion.Suggestions = append(criterion.Suggestions, "Add specific parameters or success criteria")
+	case hasSpecificityMarker && wordCount < 30:
+		criterion.Score = 8
 		criterion.Status = "Very Good"
-		criterion.Description = "Prompt is specific but could include more constraints"
-	} else {
-		criterion.Score = 5
+		criterion.Description = "Specific prompt with clear direction"
+	default: // hasActionVerb && hasSpecificityMarker && wordCount >= 30
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Prompt is highly specific and well-defined"
+		criterion.Description = "Highly specific and well-defined with clear parameters"
 	}
 
 	return criterion
@@ -174,12 +281,12 @@ func (a *Analyzer) checkSpecificity(prompt string) Criterion {
 func (a *Analyzer) checkContext(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Context",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
-	contextMarkers := []string{"because", "since", "given", "considering", "context", "background", "for", "about"}
+	contextMarkers := []string{"because", "since", "given", "considering", "context", "background", "for", "about", "in order to", "so that", "my goal", "i need", "i want"}
 
 	contextCount := 0
 	for _, marker := range contextMarkers {
@@ -190,29 +297,34 @@ func (a *Analyzer) checkContext(prompt string) Criterion {
 
 	wordCount := len(strings.Fields(prompt))
 
-	if contextCount == 0 && wordCount < 15 {
+	switch {
+	case contextCount == 0 && wordCount < 15:
 		criterion.Score = 1
 		criterion.Status = "Poor"
 		criterion.Description = "No context provided"
 		criterion.Suggestions = append(criterion.Suggestions, "Add background information or context")
-	} else if contextCount == 0 {
-		criterion.Score = 2
-		criterion.Status = "Fair"
+	case contextCount == 0 && wordCount < 30:
+		criterion.Score = 3
+		criterion.Status = "Poor"
 		criterion.Description = "Minimal context provided"
 		criterion.Suggestions = append(criterion.Suggestions, "Explain why you need this or provide relevant background")
-	} else if contextCount == 1 {
-		criterion.Score = 3
-		criterion.Status = "Good"
+	case contextCount == 1:
+		criterion.Score = 5
+		criterion.Status = "Fair"
 		criterion.Description = "Some context provided"
 		criterion.Suggestions = append(criterion.Suggestions, "Add more background details for better results")
-	} else if contextCount == 2 {
-		criterion.Score = 4
-		criterion.Status = "Very Good"
+	case contextCount == 2:
+		criterion.Score = 7
+		criterion.Status = "Good"
 		criterion.Description = "Good context provided"
-	} else {
-		criterion.Score = 5
+	case contextCount == 3:
+		criterion.Score = 8
+		criterion.Status = "Very Good"
+		criterion.Description = "Rich context with good background"
+	default: // contextCount >= 4
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Rich context with comprehensive background"
+		criterion.Description = "Comprehensive context with clear purpose and background"
 	}
 
 	return criterion
@@ -222,13 +334,16 @@ func (a *Analyzer) checkContext(prompt string) Criterion {
 func (a *Analyzer) checkStructure(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Structure",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	hasPunctuation := strings.ContainsAny(prompt, ".?!,;:")
 	hasParagraphs := strings.Contains(prompt, "\n\n")
-	hasList := strings.Contains(prompt, "1.") || strings.Contains(prompt, "-") || strings.Contains(prompt, "*")
+	hasList := strings.Contains(prompt, "1.") || strings.Contains(prompt, "2.") ||
+		strings.Contains(prompt, "-") || strings.Contains(prompt, "*")
+	hasNumbering := strings.Contains(prompt, "1)") || strings.Contains(prompt, "2)")
+	hasSections := strings.Contains(prompt, ":") && hasPunctuation
 
 	wordCount := len(strings.Fields(prompt))
 
@@ -246,34 +361,46 @@ func (a *Analyzer) checkStructure(prompt string) Criterion {
 		structureScore++
 	}
 	if hasParagraphs {
-		structureScore++
+		structureScore += 2
 	}
-	if hasList {
+	if hasList || hasNumbering {
+		structureScore += 2
+	}
+	if hasSections {
 		structureScore++
 	}
 
-	if !hasPunctuation && wordCount > 10 {
-		criterion.Score = 1
+	switch {
+	case !hasPunctuation && wordCount > 10:
+		criterion.Score = 2
 		criterion.Status = "Poor"
 		criterion.Description = "Prompt lacks proper structure and punctuation"
 		criterion.Suggestions = append(criterion.Suggestions, "Use punctuation to separate ideas")
-	} else if structureScore == 1 && wordCount > 20 {
-		criterion.Score = 2
+	case structureScore <= 1 && wordCount > 20:
+		criterion.Score = 4
 		criterion.Status = "Fair"
 		criterion.Description = "Basic structure but could be improved"
 		criterion.Suggestions = append(criterion.Suggestions, "Break into paragraphs or use lists for clarity")
-	} else if structureScore == 1 || wordCount < 15 {
-		criterion.Score = 3
-		criterion.Status = "Good"
-		criterion.Description = "Adequate structure"
-	} else if structureScore == 2 {
-		criterion.Score = 4
-		criterion.Status = "Very Good"
-		criterion.Description = "Well-structured prompt"
-	} else {
+	case structureScore <= 1:
 		criterion.Score = 5
+		criterion.Status = "Fair"
+		criterion.Description = "Adequate structure for simple prompt"
+	case structureScore == 2:
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "Good structure with clear organization"
+	case structureScore == 3:
+		criterion.Score = 7
+		criterion.Status = "Good"
+		criterion.Description = "Well-structured with multiple elements"
+	case structureScore == 4:
+		criterion.Score = 8
+		criterion.Status = "Very Good"
+		criterion.Description = "Very well-structured prompt"
+	default: // structureScore >= 5
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Excellently structured with clear organization"
+		criterion.Description = "Excellently structured with clear organization and sections"
 	}
 
 	return criterion
@@ -283,12 +410,12 @@ func (a *Analyzer) checkStructure(prompt string) Criterion {
 func (a *Analyzer) checkConstraints(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Constraints",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
-	constraintMarkers := []string{"limit", "maximum", "minimum", "should not", "must", "only", "within", "up to", "at least"}
+	constraintMarkers := []string{"limit", "maximum", "minimum", "should not", "must", "only", "within", "up to", "at least", "exactly", "no more than"}
 
 	constraintCount := 0
 	for _, marker := range constraintMarkers {
@@ -297,24 +424,30 @@ func (a *Analyzer) checkConstraints(prompt string) Criterion {
 		}
 	}
 
-	if constraintCount == 0 {
+	// Direct switch on the variable
+	switch constraintCount {
+	case 0:
 		criterion.Score = 2
-		criterion.Status = "Fair"
+		criterion.Status = "Poor"
 		criterion.Description = "No constraints specified"
 		criterion.Suggestions = append(criterion.Suggestions, "Consider adding constraints (e.g., length, format, scope)")
-	} else if constraintCount == 1 {
-		criterion.Score = 3
-		criterion.Status = "Good"
-		criterion.Description = "Some constraints provided"
+	case 1:
+		criterion.Score = 5
+		criterion.Status = "Fair"
+		criterion.Description = "Minimal constraints provided"
 		criterion.Suggestions = append(criterion.Suggestions, "Add more specific constraints for better control")
-	} else if constraintCount == 2 {
-		criterion.Score = 4
+	case 2:
+		criterion.Score = 7
+		criterion.Status = "Good"
+		criterion.Description = "Some constraints specified"
+	case 3:
+		criterion.Score = 8
 		criterion.Status = "Very Good"
 		criterion.Description = "Good constraints specified"
-	} else {
-		criterion.Score = 5
+	default: // constraintCount >= 4
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Well-defined constraints"
+		criterion.Description = "Well-defined constraints with clear boundaries"
 	}
 
 	return criterion
@@ -324,34 +457,49 @@ func (a *Analyzer) checkConstraints(prompt string) Criterion {
 func (a *Analyzer) checkOutputFormat(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Output Format",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
-	formatMarkers := []string{"format", "json", "markdown", "list", "table", "bullet", "numbered", "paragraph", "code", "style"}
+	formatMarkers := []string{
+		"format", "json", "markdown", "list", "table", "bullet", "numbered",
+		"paragraph", "code", "style", "output as", "return as", "provide as",
+		"structure as", "organize as", "csv", "xml", "html",
+	}
 
 	hasFormat := false
+	formatCount := 0
 	for _, marker := range formatMarkers {
 		if strings.Contains(lowerPrompt, marker) {
 			hasFormat = true
-			break
+			formatCount++
 		}
 	}
 
-	if !hasFormat {
+	switch {
+	case !hasFormat:
 		criterion.Score = 2
 		criterion.Status = "Fair"
 		criterion.Description = "Output format not specified"
-		criterion.Suggestions = append(criterion.Suggestions, "Specify desired format (e.g., 'as a list', 'in JSON format')")
-	} else if strings.Contains(lowerPrompt, "format") {
-		criterion.Score = 4
-		criterion.Status = "Very Good"
-		criterion.Description = "Output format mentioned"
-	} else {
-		criterion.Score = 5
+		criterion.Suggestions = append(criterion.Suggestions, "Specify desired format (e.g., 'as a list', 'in JSON format', 'as a table')")
+	case formatCount == 1 && strings.Contains(lowerPrompt, "format"):
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "Format mentioned but not detailed"
+		criterion.Suggestions = append(criterion.Suggestions, "Be more specific about the exact format structure")
+	case formatCount == 1:
+		criterion.Score = 7
+		criterion.Status = "Good"
+		criterion.Description = "Output format specified"
+	case formatCount == 2:
+		criterion.Score = 9
 		criterion.Status = "Excellent"
-		criterion.Description = "Clear output format specification"
+		criterion.Description = "Detailed output format specification"
+	default: // formatCount >= 3
+		criterion.Score = 10
+		criterion.Status = "Excellent"
+		criterion.Description = "Comprehensive output format with multiple specifications"
 	}
 
 	return criterion
@@ -361,34 +509,64 @@ func (a *Analyzer) checkOutputFormat(prompt string) Criterion {
 func (a *Analyzer) checkRole(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Role/Persona",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
-	roleMarkers := []string{"as a", "you are", "act as", "pretend", "imagine you", "expert", "professional"}
+	roleMarkers := []string{
+		"as a", "you are", "act as", "pretend", "imagine you", "assume you",
+		"expert", "professional", "specialist", "teacher", "coach", "consultant",
+		"acting as", "role of", "persona of",
+	}
 
 	hasRole := false
+	roleCount := 0
+	hasExpertise := false
+
 	for _, marker := range roleMarkers {
 		if strings.Contains(lowerPrompt, marker) {
 			hasRole = true
-			break
+			roleCount++
+			if strings.Contains(marker, "expert") || strings.Contains(marker, "professional") ||
+				strings.Contains(marker, "specialist") {
+				hasExpertise = true
+			}
 		}
 	}
 
-	if !hasRole {
+	// Check for specific expertise mentions
+	expertiseTerms := []string{"expert in", "specialist in", "professional with", "experience in", "skilled in"}
+	for _, term := range expertiseTerms {
+		if strings.Contains(lowerPrompt, term) {
+			hasExpertise = true
+			roleCount++
+		}
+	}
+
+	switch {
+	case !hasRole:
 		criterion.Score = 2
 		criterion.Status = "Fair"
 		criterion.Description = "No role or persona defined"
-		criterion.Suggestions = append(criterion.Suggestions, "Define a role (e.g., 'as an expert in X')")
-	} else if strings.Contains(lowerPrompt, "expert") || strings.Contains(lowerPrompt, "professional") {
-		criterion.Score = 5
-		criterion.Status = "Excellent"
-		criterion.Description = "Clear expert role defined"
-	} else {
-		criterion.Score = 4
+		criterion.Suggestions = append(criterion.Suggestions, "Define a role (e.g., 'as an expert in X', 'act as a teacher')")
+	case hasRole && !hasExpertise && roleCount == 1:
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "Basic role mentioned"
+		criterion.Suggestions = append(criterion.Suggestions, "Add expertise level or specific domain knowledge")
+	case hasRole && hasExpertise && roleCount == 1:
+		criterion.Score = 8
 		criterion.Status = "Very Good"
-		criterion.Description = "Role mentioned"
+		criterion.Description = "Clear expert role defined"
+	case roleCount == 2:
+		criterion.Score = 9
+		criterion.Status = "Excellent"
+		criterion.Description = "Well-defined role with expertise"
+	default: // roleCount >= 3
+		criterion.Score = 10
+		criterion.Status = "Excellent"
+		criterion.Description = "Comprehensive role definition with detailed expertise"
 	}
 
 	return criterion
@@ -398,12 +576,12 @@ func (a *Analyzer) checkRole(prompt string) Criterion {
 func (a *Analyzer) checkExamples(prompt string) Criterion {
 	criterion := Criterion{
 		Name:        "Examples",
-		MaxScore:    5,
+		MaxScore:    10,
 		Suggestions: make([]string, 0),
 	}
 
 	lowerPrompt := strings.ToLower(prompt)
-	exampleMarkers := []string{"example", "such as", "like", "for instance", "e.g.", "i.e."}
+	exampleMarkers := []string{"example", "such as", "like", "for instance", "e.g.", "i.e.", "for example"}
 
 	exampleCount := 0
 	for _, marker := range exampleMarkers {
@@ -412,19 +590,26 @@ func (a *Analyzer) checkExamples(prompt string) Criterion {
 		}
 	}
 
-	if exampleCount == 0 {
+	// Direct switch on the variable
+	switch exampleCount {
+	case 0:
 		criterion.Score = 2
-		criterion.Status = "Fair"
+		criterion.Status = "Poor"
 		criterion.Description = "No examples provided"
 		criterion.Suggestions = append(criterion.Suggestions, "Include examples to clarify expectations")
-	} else if exampleCount == 1 {
-		criterion.Score = 4
+	case 1:
+		criterion.Score = 6
+		criterion.Status = "Good"
+		criterion.Description = "One example provided"
+		criterion.Suggestions = append(criterion.Suggestions, "Add more examples for clarity")
+	case 2:
+		criterion.Score = 8
 		criterion.Status = "Very Good"
-		criterion.Description = "Example provided"
-	} else {
-		criterion.Score = 5
+		criterion.Description = "Multiple examples provided"
+	default: // exampleCount >= 3
+		criterion.Score = 10
 		criterion.Status = "Excellent"
-		criterion.Description = "Multiple examples for clarity"
+		criterion.Description = "Rich examples for comprehensive clarity"
 	}
 
 	return criterion

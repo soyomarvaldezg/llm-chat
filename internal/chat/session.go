@@ -120,14 +120,8 @@ func (s *Session) Start() error {
 			continue
 		}
 
-		for {
-			if !s.scanner.Scan() {
-				// EOF - process what we have
-				break
-			}
-
+		for s.scanner.Scan() {
 			line := s.scanner.Text()
-
 			// Check if line is empty
 			if strings.TrimSpace(line) == "" {
 				emptyLineCount++
@@ -139,7 +133,6 @@ func (s *Session) Start() error {
 				inputLines = append(inputLines, "")
 				continue
 			}
-
 			// Reset empty line counter and add the line
 			emptyLineCount = 0
 			inputLines = append(inputLines, line)
@@ -329,7 +322,7 @@ func (s *Session) assessPrompt(prompt string) {
 			status = "❌"
 		}
 
-		fmt.Printf("%s %s: %d/5 (%s) - %s\n",
+		fmt.Printf("%s %s: %d/10 (%s) - %s\n",
 			status,
 			criterion.Name,
 			criterion.Score,
@@ -392,9 +385,30 @@ func (s *Session) improvePromptWithAssessment(prompt string, result *assessment.
 	}
 
 	fmt.Println()
+	// Assess the improved prompt to show improvement
+	improvedAssessment := s.analyzer.Analyze(improved)
+
 	ui.PrintSeparator()
 	ui.SuccessColor.Println("✨ IMPROVED PROMPT")
 	ui.PrintSeparator()
+
+	// Show before/after comparison
+	fmt.Printf("Score improvement: ")
+	if result.OverallScore < 60 {
+		ui.ErrorColor.Printf("%d/100", result.OverallScore)
+	} else {
+		ui.InfoColor.Printf("%d/100", result.OverallScore)
+	}
+	fmt.Print(" → ")
+	if improvedAssessment.OverallScore >= 75 {
+		ui.SuccessColor.Printf("%d/100", improvedAssessment.OverallScore)
+	} else if improvedAssessment.OverallScore >= 60 {
+		ui.InfoColor.Printf("%d/100", improvedAssessment.OverallScore)
+	} else {
+		ui.SystemColor.Printf("%d/100", improvedAssessment.OverallScore)
+	}
+	fmt.Printf(" (%s → %s)\n\n", result.OverallRating, improvedAssessment.OverallRating)
+
 	fmt.Println(improved)
 	ui.PrintSeparator()
 

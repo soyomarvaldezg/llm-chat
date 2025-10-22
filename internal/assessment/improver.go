@@ -1,3 +1,5 @@
+// Package assessment provides prompt quality analysis and improvement capabilities.
+// It evaluates prompts across multiple criteria and generates actionable feedback.
 package assessment
 
 import (
@@ -61,45 +63,89 @@ func (i *Improver) Improve(originalPrompt string, assessment *Assessment) (strin
 func (i *Improver) buildImprovementPrompt(originalPrompt string, assessment *Assessment) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are a prompt engineering expert. Your task is to improve the following prompt.\n\n")
+	sb.WriteString("You are a transparent AI prompt engineering expert. Your task is to transform a weak prompt into an excellent, copy-pastable prompt using a systematic approach.\n\n")
 
-	sb.WriteString("ORIGINAL PROMPT:\n")
+	sb.WriteString("=== ORIGINAL PROMPT ===\n")
 	sb.WriteString(originalPrompt)
 	sb.WriteString("\n\n")
 
-	sb.WriteString("ASSESSMENT RESULTS:\n")
+	sb.WriteString("=== ASSESSMENT (0-10 scale) ===\n")
 	sb.WriteString(fmt.Sprintf("Overall Score: %d/100 (%s)\n", assessment.OverallScore, assessment.OverallRating))
-	sb.WriteString("\nIssues Found:\n")
+	sb.WriteString("\nWeaknesses to fix:\n")
 
+	// Prioritize issues by severity and importance
 	for _, criterion := range assessment.Criteria {
-		if criterion.Score < 4 {
-			sb.WriteString(fmt.Sprintf("- %s (%s): %s\n", criterion.Name, criterion.Status, criterion.Description))
-			for _, suggestion := range criterion.Suggestions {
-				sb.WriteString(fmt.Sprintf("  → %s\n", suggestion))
+		if criterion.Score < 7 {
+			sb.WriteString(fmt.Sprintf("- %s: %d/10 (%s) - %s\n",
+				criterion.Name, criterion.Score, criterion.Status, criterion.Description))
+			if len(criterion.Suggestions) > 0 {
+				sb.WriteString(fmt.Sprintf("  Fix: %s\n", criterion.Suggestions[0]))
 			}
 		}
 	}
 
+	sb.WriteString("\n=== IMPROVEMENT PROCESS ===\n")
+	sb.WriteString("Follow this decision tree to prioritize fixes:\n")
+	sb.WriteString("1. CLARITY FIRST: Define single objective, bound scope, define terms\n")
+	sb.WriteString("2. RELEVANCE: Add 'so that...' to link to goal/outcome/decision\n")
+	sb.WriteString("3. SPECIFICITY: Add format, length, scope, success criteria\n")
+	sb.WriteString("4. CONTEXT: Add role, audience, domain, purpose\n")
+	sb.WriteString("5. STRUCTURE: Organize with sections if complex\n")
+	sb.WriteString("6. CONSTRAINTS: Add limits (time, length, tools, exclusions)\n")
+	sb.WriteString("7. OUTPUT FORMAT: Specify exact format (bullets, JSON, table, etc.)\n")
+	sb.WriteString("8. ROLE/PERSONA: Define expertise level if beneficial\n")
+	sb.WriteString("9. EXAMPLES: Add sample inputs/outputs to ground response\n")
 	sb.WriteString("\n")
-	sb.WriteString("INSTRUCTIONS:\n")
-	sb.WriteString("1. Create an improved version of the prompt that addresses all the issues\n")
-	sb.WriteString("2. Make it clear, specific, and well-structured\n")
-	sb.WriteString("3. Add context, constraints, and examples where appropriate\n")
-	sb.WriteString("4. Define a role or persona if beneficial\n")
-	sb.WriteString("5. Specify the desired output format\n")
-	sb.WriteString("6. Keep the original intent but enhance clarity and effectiveness\n\n")
 
-	sb.WriteString("Provide ONLY the improved prompt, without any explanations or meta-commentary.\n")
-	sb.WriteString("Start directly with the improved prompt text.\n")
+	sb.WriteString("=== REWRITE CHECKLIST ===\n")
+	sb.WriteString("Ensure the improved prompt includes:\n")
+	sb.WriteString("✓ Clear objective: Single, testable ask\n")
+	sb.WriteString("✓ Context: Who, why, what for (audience, purpose)\n")
+	sb.WriteString("✓ Constraints: Word limit, time, scope boundaries\n")
+	sb.WriteString("✓ Format: Exact structure (bullets, prose, sections)\n")
+	sb.WriteString("✓ Success criteria: What makes a good answer\n")
+	sb.WriteString("✓ Relevance: Linked to practical outcome with 'so that...'\n")
+	sb.WriteString("\n")
+
+	sb.WriteString("=== OUTPUT REQUIREMENTS ===\n")
+	sb.WriteString("1. Start with a brief 1-sentence explanation of key fixes applied\n")
+	sb.WriteString("2. Then provide the improved prompt as a single, copy-pastable block\n")
+	sb.WriteString("3. The improved prompt must:\n")
+	sb.WriteString("   - Be self-contained (no references to 'the original')\n")
+	sb.WriteString("   - Start with action verb or role definition\n")
+	sb.WriteString("   - Include all necessary context inline\n")
+	sb.WriteString("   - Be under 200 words unless complexity requires more\n")
+	sb.WriteString("   - Use clear structure (bullets/numbers if multi-part)\n")
+	sb.WriteString("4. DO NOT add meta-commentary, explanations, or analysis after the prompt\n")
+	sb.WriteString("5. DO NOT use phrases like 'here is' or 'improved version:'\n")
+	sb.WriteString("\n")
+
+	sb.WriteString("Format your response EXACTLY like this:\n")
+	sb.WriteString("Key fixes: [1 sentence summarizing main improvements]\n\n")
+	sb.WriteString("---IMPROVED PROMPT---\n")
+	sb.WriteString("[The actual improved prompt starts here, ready to copy-paste]\n")
 
 	return sb.String()
 }
 
 // extractImprovedPrompt extracts the improved prompt from the LLM response
 func (i *Improver) extractImprovedPrompt(response string) string {
-	// Remove common prefixes
 	response = strings.TrimSpace(response)
 
+	// Look for the separator marker
+	if idx := strings.Index(response, "---IMPROVED PROMPT---"); idx != -1 {
+		response = strings.TrimSpace(response[idx+len("---IMPROVED PROMPT---"):])
+	}
+
+	// Remove "Key fixes:" line if present at the start
+	if after, found := strings.CutPrefix(response, "Key fixes:"); found {
+		// Find the first newline after "Key fixes:"
+		if nlIdx := strings.Index(after, "\n"); nlIdx != -1 {
+			response = strings.TrimSpace(after[nlIdx+1:])
+		}
+	}
+
+	// Remove common prefixes using modern CutPrefix
 	prefixes := []string{
 		"Here is the improved prompt:",
 		"Here's the improved prompt:",
@@ -109,14 +155,15 @@ func (i *Improver) extractImprovedPrompt(response string) string {
 	}
 
 	for _, prefix := range prefixes {
-		if strings.HasPrefix(response, prefix) {
-			response = strings.TrimSpace(strings.TrimPrefix(response, prefix))
+		if after, found := strings.CutPrefix(response, prefix); found {
+			response = strings.TrimSpace(after)
+			break
 		}
 	}
 
 	// Remove markdown code blocks if present
-	response = strings.TrimPrefix(response, "```")
-	response = strings.TrimSuffix(response, "```")
+	response, _ = strings.CutPrefix(response, "```")
+	response, _ = strings.CutSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
 	return response
